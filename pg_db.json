@@ -1,0 +1,26 @@
+{
+  "database" : [
+    {
+      "name" : "example",
+      "state" : "enabled",
+      "schema" : [
+        {
+          "name" : "disabled_schema",
+          "state" : "exclude"
+        },
+        {
+          "name" : "slow_schema",
+          "state" : "exclude"
+        }
+      ]
+    },
+    {
+      "name" : "template0",
+      "state" : "disabled"
+    },
+    {
+      "name" : "template1",
+      "state" : "disabled"
+    }
+  ]
+}
