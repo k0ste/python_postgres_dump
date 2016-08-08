@@ -4,12 +4,13 @@
 """
 GPL
 2016, (c) Konstantin Shalygin <k0ste@k0ste.ru>
-version: 0.1
 """
 
 import subprocess
 import os,sys,shutil
 import json
+import logging
+from logging.handlers import TimedRotatingFileHandler
 from optparse import OptionParser
 from datetime import datetime, timezone
 
@@ -18,6 +19,7 @@ class PostgresCommand(object):
         """
         Method return all databases in PostgreSQL instance.
         """
+
         self.cmd = [self.pg_psql]
         self.cmd.append("-A") # No align for output without separators
         self.cmd.append("-q") # No welcome messages, row counters
@@ -42,7 +44,7 @@ class PostgresCommand(object):
         rc = proc.returncode
 
         if rc == 0:
-            sys.stdout.write("[{0}] Receive all databases from host '{1}:{2}'.\n".format(self.now, self.pg_host, self.pg_port))
+            logging.info("Receive all databases from host '{0}:{1}'.".format(self.pg_host, self.pg_port))
             return out
         else:
             raise Exception(err)
@@ -55,7 +57,8 @@ class PostgresCommand(object):
         2. Backup databases.
         3. Backup globals.
         """
-        sys.stdout.write("[{0}] Start worker.\n".format(self.now))
+
+        logging.info("Start worker.")
 
         pg_dbs = self.get_all_databases()
 
@@ -66,19 +69,19 @@ class PostgresCommand(object):
                     cmd = self.make_backup_cmd(db)
                     self.backup_single_db(db, cmd)
                 except:
-                    sys.stderr.write("[{0}] Can't backup database '{1}'.\n".format(self.now, db))
+                    logging.error("Can't backup database '{0}'.".format(db))
             else: pass
 
         g = self.backup_globals() # Always backup globals
         if g:
-            sys.stdout.write("[{0}] Stop worker.\n".format(self.now))
+            logging.info("Stop worker.")
 
     def make_backup_cmd(self, db):
         """
         Method return cmd with PostgreSQL options and compressor options.
         """
 
-        cmd = [self.pg_dump, "-F", "c", "-b"] # provided by Krapchatov Iliya
+        cmd = [self.pg_dump, "-F", "c", "-b"] # Format: custom. Blobs.
         cmd.extend(["-h", self.pg_host,
                     "-p", self.pg_port,
                     "-U", self.pg_user])
@@ -102,7 +105,8 @@ class PostgresCommand(object):
         """
         Backup singe database via generated cmd.
         """
-        sys.stdout.write("[{0}] Start backup database '{1}'.\n".format(self.now, db))
+
+        logging.error("Start backup database '{0}'.".format(db))
 
         proc = subprocess.Popen(' '.join(cmd), env={"PGPASSWORD":self.postgres_password},
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -112,7 +116,7 @@ class PostgresCommand(object):
         rc = proc.returncode
 
         if rc == 0:
-            sys.stdout.write("[{0}] OK backup database {1}.\n".format(self.now, db))
+            logging.info("OK backup database {0}.".format(db))
             return True
         else:
             raise Exception(err)
@@ -122,7 +126,8 @@ class PostgresCommand(object):
         """
         Backup PostgreSQL globals via pg_dumpall.
         """
-        sys.stdout.write("[{0}] Start backup globals.\n".format(self.now))
+
+        logging.info("Start backup globals.")
 
         cmd = [self.pg_dumpall, "-g", "-h", self.pg_host, "-p", self.pg_port, "-U", self.pg_user]
 
@@ -141,7 +146,7 @@ class PostgresCommand(object):
         rc = proc.returncode
 
         if rc == 0:
-            sys.stdout.write("[{0}] OK backup globals.\n".format(self.now))
+            logging.info("OK backup globals.")
             return True
         else:
             raise Exception(err)
@@ -152,13 +157,14 @@ class PostgresCommand(object):
         Exclude disabled databases (like template0 and any other
         defined in json).
         """
+
         for database_index in range(len(self.json_root)):
 
             db_name = self.json_root[database_index]["name"]
             db_state = self.json_root[database_index]["state"]
 
             if db_name == db and db_state == "disabled":
-                sys.stdout.write("[{0}] Database '{1}' will not be dumped.\n".format(self.now, db))
+                logging.info("Database '{0}' disabled for dump.".format(db))
                 return False
 
         return True
@@ -168,6 +174,7 @@ class PostgresCommand(object):
         Parse json-file for worker(). If database found, json parse for
         exclude-schema definitions.
         """
+
         cmd = []
 
         for database_index in range(len(self.json_root)):
@@ -181,17 +188,38 @@ class PostgresCommand(object):
 
             return cmd
 
+    def logger(self, log_file=None):
+        """
+        Consloe Handler - for output to stdout.
+        File Handler - to file with rotation.
+        """
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        log_formatter = logging.Formatter(fmt="[%(asctime)s] %(message)s",
+                                          datefmt="%a %b %d %H:%M:%S %Z %Y") # Data in Linux format
+
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(log_formatter)
+        root_logger.addHandler(console_handler)
+
+        if log_file:
+            log_file = "{0}/{1}.log".format(log_file, os.path.splitext(sys.argv[0])[0])
+            file_handler = TimedRotatingFileHandler(log_file, "midnight", backupCount=7)
+            file_handler.setFormatter(log_formatter)
+            root_logger.addHandler(file_handler)
+
     def __init__(self):
-        parser = OptionParser(usage="%prog -H localhost -p secret -o /opt/backups   ", version="%prog 0.1")
+        parser = OptionParser(usage="%prog -H localhost -p secret -o /opt/backups --log /var/log/backups", version="%prog 0.2")
         parser.add_option("-c", "--compressor", type="choice", dest="comp", default="gzip", choices=['gzip', 'xz', 'lzma', '7z', '7za'], help="Compressor (7z, gzip, xz) [default: %default]")
         parser.add_option("-l", "--level", type="int", dest="level", default="9", help="Compression level (range 1-9) [default: %default]")
-        parser.add_option("-o", "--output", type="string", dest="output", default="", help="Output path [default: %default]")
+        parser.add_option("-o", "--output", type="string", dest="output", help="Output path [default: %default]")
         parser.add_option("-j", "--json-file", type="string", dest="json_file", default="pg_db.json", help="JSON file for exclude schemas [default: %default]")
         parser.add_option("-H", "--host", type="string", dest="pg_host", help="PostgreSQL host [default: %default]")
         parser.add_option("-P", "--port", type="int", dest="pg_port", default="5432", help="PostgreSQL port [default: %default]")
         parser.add_option("-d", "--database", type="string", dest="pg_db", default="postgres", help="PostgreSQL database [default: %default]")
         parser.add_option("-u", "--user", type="string", dest="pg_user", default="postgres", help="PostgreSQL user [default: %default]")
         parser.add_option("-p", "--password", type="string", dest="postgres_password", help="PostgreSQL password [default: %default]")
+        parser.add_option("--log", type="string", dest="log_file", help="Where save log [default: %default]")
         (opts, args) = parser.parse_args()
 
         if (not opts.pg_host or not opts.postgres_password or not opts.output):
@@ -204,10 +232,25 @@ class PostgresCommand(object):
             parser.error("\nCompression level must be in range 1-9, now is '{0}'\n".format(opts.level))
 
         if not shutil.which(opts.comp):
-            parser.error("\nUnable to find: {0} in '{1}'\n".format(opts.comp, os.defpath))
+            parser.error("\nUnable to find '{0}' in '{1}'.".format(opts.comp, os.defpath))
         else:
             self.comp = opts.comp
             self.comp_path = shutil.which(opts.comp)
+
+        if not os.path.isfile(opts.json_file):
+            parser.error("\nUnable to open JSON '{0}'.".format(opts.json_file))
+
+        if not shutil.which("psql"):
+            parser.error("\nUnable to find psql in '{0}'.".format(os.defpath))
+        else: self.pg_psql = shutil.which("psql")
+
+        if not shutil.which("pg_dump"):
+            parser.error("\nUnable to find pg_dump in '{0}'.".format(os.defpath))
+        else: self.pg_dump = shutil.which("pg_dump")
+
+        if not shutil.which("pg_dumpall"):
+            parser.error("\nUnable to find pg_dumpall in '{0}'.".format(os.defpath))
+        else: self.pg_dumpall = shutil.which("pg_dumpall")
 
         if not os.path.isdir(opts.output):
             try:
@@ -215,26 +258,17 @@ class PostgresCommand(object):
             except OSError as e:
                 raise OSError(e)
 
-        if not os.path.isfile(opts.json_file):
-            parser.error("\nUnable to open: {0}\n".format(opts.json_file))
-
-        if not shutil.which("psql"):
-            sys.stderr.write("\nUnable to find: psql in '{0}'\n".format(os.defpath))
-        else: self.pg_psql = shutil.which("psql")
-
-        if not shutil.which("pg_dump"):
-            sys.stderr.write("\nUnable to find: pg_dump in '{0}'\n".format(os.defpath))
-        else: self.pg_dump = shutil.which("pg_dump")
-
-        if not shutil.which("pg_dumpall"):
-            sys.stderr.write("\nUnable to find: pg_dumpall in '{0}'\n".format(os.defpath))
-        else: self.pg_dumpall = shutil.which("pg_dumpall")
+        if opts.log_file and not os.path.isdir(opts.log_file):
+            try:
+                os.makedirs(opts.log_file)
+            except OSError as e:
+                raise OSError(e)
 
         with open(opts.json_file) as json_data:
             self.json_full = json.loads(json_data.read())
             self.json_root = self.json_full["database"]
 
-        self.now = datetime.now(timezone.utc).astimezone().strftime("%c %z") # Date in Linux date format
+        self.logger(opts.log_file)
         self.output = opts.output
         self.pg_host = opts.pg_host
         self.pg_port = str(opts.pg_port)
