@@ -7,12 +7,12 @@ GPL
 """
 
 import subprocess
-import os,sys,shutil
+import os,sys
+import shutil
 import json
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from optparse import OptionParser
-from datetime import datetime, timezone
 
 class PostgresCommand(object):
     def get_all_databases(self):
@@ -38,7 +38,7 @@ class PostgresCommand(object):
 
         proc = subprocess.Popen(self.cmd, env={"PGPASSWORD":self.postgres_password},
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                universal_newlines=True, shell=False)
+                                universal_newlines=True)
 
         out, err = proc.communicate()
         rc = proc.returncode
@@ -53,7 +53,7 @@ class PostgresCommand(object):
         """
         For all databases in PostgreSQL instance:
 
-        1. Check db state in JSON. If excluded - do nothing.
+        1. Check db state in json-file. If excluded - do nothing.
         2. Backup databases.
         3. Backup globals.
         """
@@ -97,7 +97,7 @@ class PostgresCommand(object):
         elif self.comp == "7z" or self.comp == "7za":
             cmd.extend(["|", self.comp_path, "a", "-si", "-mx={0}".format(self.level), "{0}/{1}.tar.7z".format(self.output, db)])
         elif self.comp == "xz" or self.comp == "lzma":
-            cmd.extend(["|", "/usr/bin/xz", "-zfc", "-{0}".format(self.level), ">", "{0}/{1}.tar.xz".format(self.output, db)])
+            cmd.extend(["|", self.comp_path, "-zfc", "-{0}".format(self.level), ">", "{0}/{1}.tar.xz".format(self.output, db)])
 
         return cmd
 
@@ -110,7 +110,7 @@ class PostgresCommand(object):
 
         proc = subprocess.Popen(' '.join(cmd), env={"PGPASSWORD":self.postgres_password},
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    universal_newlines=False, shell=True)
+                                    shell=True)
 
         out, err = proc.communicate()
         rc = proc.returncode
@@ -136,11 +136,11 @@ class PostgresCommand(object):
         elif self.comp == "7z" or self.comp == "7za":
             cmd.extend(["|", self.comp_path, "a", "-si", "-mx={0}".format(self.level), "{0}/globals.sql.7z".format(self.output)])
         elif self.comp == "xz" or self.comp == "lzma":
-            cmd.extend(["|", "/usr/bin/xz", "-zfc", "-{0}".format(self.level), ">", "{0}/globals.sql.xz".format(self.output)])
+            cmd.extend(["|", self.comp_path, "-zfc", "-{0}".format(self.level), ">", "{0}/globals.sql.xz".format(self.output)])
 
         proc = subprocess.Popen(' '.join(cmd), env={"PGPASSWORD":self.postgres_password},
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                universal_newlines=False, shell=True)
+                                shell=True)
 
         out, err = proc.communicate()
         rc = proc.returncode
