@@ -116,7 +116,7 @@ class PostgresCommand(object):
         rc = proc.returncode
 
         if rc == 0:
-            logging.info("OK backup database {0}.".format(db))
+            logging.info("OK backup database '{0}'.".format(db))
             return True
         else:
             raise Exception(err)
@@ -171,7 +171,7 @@ class PostgresCommand(object):
 
     def parser(self, db):
         """
-        Parse json-file for worker(). If database found, json parse for
+        Parse json-file for worker(). If database found, parse for
         exclude-schema definitions.
         """
 
@@ -190,13 +190,13 @@ class PostgresCommand(object):
 
     def logger(self, log_file=None):
         """
-        Consloe Handler - for output to stdout.
+        Console Handler - for output to stdout.
         File Handler - to file with rotation.
         """
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.INFO)
         log_formatter = logging.Formatter(fmt="[%(asctime)s] %(message)s",
-                                          datefmt="%a %b %d %H:%M:%S %Z %Y") # Data in Linux format
+                                          datefmt="%a %b %d %H:%M:%S %Z %Y") # Date in Linux format
 
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(log_formatter)
@@ -209,17 +209,17 @@ class PostgresCommand(object):
             root_logger.addHandler(file_handler)
 
     def __init__(self):
-        parser = OptionParser(usage="%prog -H localhost -p secret -o /opt/backups --log /var/log/backups", version="%prog 0.2")
+        parser = OptionParser(usage="%prog -H localhost -p secret -o /opt/backups --log /var/log/backups", version="%prog 0.3")
         parser.add_option("-c", "--compressor", type="choice", dest="comp", default="gzip", choices=['gzip', 'xz', 'lzma', '7z', '7za'], help="Compressor (7z, gzip, xz) [default: %default]")
         parser.add_option("-l", "--level", type="int", dest="level", default="9", help="Compression level (range 1-9) [default: %default]")
         parser.add_option("-o", "--output", type="string", dest="output", help="Output path [default: %default]")
-        parser.add_option("-j", "--json-file", type="string", dest="json_file", default="pg_db.json", help="JSON file for exclude schemas [default: %default]")
+        parser.add_option("-j", "--json-file", type="string", dest="json_file", default="pg_db.json", help="JSON file [default: %default]")
         parser.add_option("-H", "--host", type="string", dest="pg_host", help="PostgreSQL host [default: %default]")
         parser.add_option("-P", "--port", type="int", dest="pg_port", default="5432", help="PostgreSQL port [default: %default]")
         parser.add_option("-d", "--database", type="string", dest="pg_db", default="postgres", help="PostgreSQL database [default: %default]")
         parser.add_option("-u", "--user", type="string", dest="pg_user", default="postgres", help="PostgreSQL user [default: %default]")
         parser.add_option("-p", "--password", type="string", dest="postgres_password", help="PostgreSQL password [default: %default]")
-        parser.add_option("--log", type="string", dest="log_file", help="Where save log [default: %default]")
+        parser.add_option("-L", "--log", type="string", dest="log_file", help="Where save log [default: %default]")
         (opts, args) = parser.parse_args()
 
         if (not opts.pg_host or not opts.postgres_password or not opts.output):
@@ -229,7 +229,7 @@ class PostgresCommand(object):
         if opts.level >= 1 and opts.level <= 9:
             self.level = str(opts.level)
         else:
-            parser.error("\nCompression level must be in range 1-9, now is '{0}'\n".format(opts.level))
+            parser.error("\nCompression level must be in range 1-9, now is '{0}'.".format(opts.level))
 
         if not shutil.which(opts.comp):
             parser.error("\nUnable to find '{0}' in '{1}'.".format(opts.comp, os.defpath))
